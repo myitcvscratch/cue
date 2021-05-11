@@ -46,10 +46,10 @@ workflows: [
 		file:   "new_version_triggers.yml"
 		schema: new_version_triggers
 	},
-	{
-		file:   "mirror.yml"
-		schema: mirror
-	},
+	// {
+	//  file:   "mirror.yml"
+	//  schema: mirror
+	// },
 ]
 
 test: _#bashWorkflow & {
@@ -86,12 +86,12 @@ test: _#bashWorkflow & {
 				},
 				_#goGenerate,
 				_#goTest,
-				_#goTestRace & {
-					if: "${{ \(_#isMaster) || \(_#isCLCITestBranch) && matrix.go-version == '\(_#latestStableGo)' && matrix.os == '\(_#linuxMachine)' }}"
-				},
+				// _#goTestRace & {
+				//  if: "${{ \(_#isMaster) || \(_#isCLCITestBranch) && matrix.go-version == '\(_#latestStableGo)' && matrix.os == '\(_#linuxMachine)' }}"
+				// },
 				_#goReleaseCheck,
 				_#checkGitClean,
-				_#pullThroughProxy,
+				// _#pullThroughProxy,
 				_#failCLBuild,
 			]
 		}
@@ -112,7 +112,7 @@ test: _#bashWorkflow & {
 				_#step & {
 					run: """
 						\(_#tempCueckooGitDir)
-						git push https://github.com/cuelang/cue :${GITHUB_REF#\(_#branchRefPrefix)}
+						git push https://github.com/myitcvscratch/cue :${GITHUB_REF#\(_#branchRefPrefix)}
 						"""
 				},
 			]
@@ -215,7 +215,7 @@ repository_dispatch: _#bashWorkflow & {
 						\(_#tempCueckooGitDir)
 						git fetch https://cue-review.googlesource.com/cue ${{ github.event.client_payload.payload.ref }}
 						git checkout -b ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }} FETCH_HEAD
-						git push https://github.com/cuelang/cue ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }}
+						git push https://github.com/myitcvscratch/cue ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }}
 						"""
 				},
 			]
@@ -386,8 +386,16 @@ _#testStrategy: {
 	"fail-fast": false
 	matrix: {
 		// Use a stable version of 1.14.x for go generate
-		"go-version": [_#codeGenGo, _#latestStableGo, "1.16"]
-		os: [_#linuxMachine, _#macosMachine, _#windowsMachine]
+		"go-version": [
+			// _#codeGenGo,
+			// _#latestStableGo,
+			"1.16",
+		]
+		os: [
+			_#linuxMachine,
+			// _#macosMachine,
+			// _#windowsMachine,
+		]
 	}
 }
 

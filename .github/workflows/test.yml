@@ -29,13 +29,9 @@ jobs:
       fail-fast: false
       matrix:
         go-version:
-        - 1.14.14
-        - 1.15.8
         - "1.16"
         os:
         - ubuntu-18.04
-        - macos-10.15
-        - windows-2019
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -65,21 +61,10 @@ jobs:
       run: go generate ./...
     - name: Test
       run: go test ./...
-    - if: ${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/ci/')
-        && matrix.go-version == '1.15.8' && matrix.os == 'ubuntu-18.04' }}
-      name: Test with -race
-      run: go test -race ./...
     - name: gorelease check
       run: go run golang.org/x/exp/cmd/gorelease
     - name: Check that git is clean post generate and tests
       run: test -z "$(git status --porcelain)" || (git status; git diff; false)
-    - if: ${{ github.ref == 'refs/heads/master' }}
-      name: Pull this commit through the proxy on master
-      run: |-
-        v=$(git rev-parse HEAD)
-        cd $(mktemp -d)
-        go mod init mod.com
-        GOPROXY=https://proxy.golang.org go get -d cuelang.org/go/cmd/cue@$v
     - if: ${{ startsWith(github.ref, 'refs/heads/ci/') && failure() }}
       name: Post any failures for this matrix entry
       run: 'curl -f -s -H "Content-Type: application/json" --request POST --data ''{"tag":"trybot","message":"Build
@@ -117,4 +102,4 @@ jobs:
         git config user.name cueckoo
         git config user.email cueckoo@gmail.com
         git config http.https://github.com/.extraheader "AUTHORIZATION: basic $(echo -n cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} | base64)"
-        git push https://github.com/cuelang/cue :${GITHUB_REF#refs/heads/}
+        git push https://github.com/myitcvscratch/cue :${GITHUB_REF#refs/heads/}

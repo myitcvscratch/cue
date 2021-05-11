@@ -27,7 +27,7 @@
 # of how to pass in Gerrit and GitHub credentials when running an instance of
 # the cueckoo/copybara image.
 
-github_url = "https://github.com/cuelang/cue.git"
+github_url = "https://github.com/myitcvscratch/cue.git"
 gerrit_url = "https://cue-review.googlesource.com/cue"
 
 origin_github_pr = git.github_pr_origin(
@@ -67,7 +67,7 @@ core.workflow(
                 "${GITHUB_PR_TITLE}\n\n" +
                 "${GITHUB_PR_BODY}\n\n" +
                 "Closes #${GITHUB_PR_NUMBER}\n" +
-                "https://github.com/cuelang/cue/pull/${GITHUB_PR_NUMBER}",
+                "https://github.com/myitcvscratch/cue/pull/${GITHUB_PR_NUMBER}",
                 ),
             ],
         mode = "CHANGE_REQUEST",

@@ -21,7 +21,7 @@ jobs:
         git config http.https://github.com/.extraheader "AUTHORIZATION: basic $(echo -n cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} | base64)"
         git fetch https://cue-review.googlesource.com/cue ${{ github.event.client_payload.payload.ref }}
         git checkout -b ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }} FETCH_HEAD
-        git push https://github.com/cuelang/cue ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }}
+        git push https://github.com/myitcvscratch/cue ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }}
   mirror:
     runs-on: ubuntu-18.04
     defaults:
