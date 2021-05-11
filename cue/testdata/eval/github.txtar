@@ -28,15 +28,6 @@ workflows:           [...{
 }, {
 	file:   "release.yml"
 	schema: release
-}, {
-	file:   "tip_triggers.yml"
-	schema: tip_triggers
-}, {
-	file:   "new_version_triggers.yml"
-	schema: new_version_triggers
-}, {
-	file:   "mirror.yml"
-	schema: mirror
 }]
 test: _#bashWorkflow & {
 	name: "Test"
@@ -49,24 +40,22 @@ test: _#bashWorkflow & {
 			"runs-on": _#linuxMachine
 			steps:     [..._ & {
 				if: "${{ \(_#isCLCITestBranch) }}"
-			}] & [_#writeCookiesFile, _#startCLBuild]
+			}] & [_#writeNetrcFile, _#startCLBuild]
 		}
 		test: {
 			needs:     "start"
 			strategy:  _#testStrategy
 			"runs-on": "${{ matrix.os }}"
-			steps: [_#writeCookiesFile, _#installGo, _#checkoutCode, _#cacheGoModules, _#setGoBuildTags & {
+			steps: [_#writeNetrcFile, _#installGo, _#checkoutCode, _#cacheGoModules, _#setGoBuildTags & {
 				_#tags: "long"
 				if:     "${{ \(_#isMaster) }}"
-			}, _#goGenerate, _#goTest, _#goTestRace & {
-				if: "${{ \(_#isMaster) || \(_#isCLCITestBranch) && matrix.go-version == '\(_#latestStableGo)' && matrix.os == '\(_#linuxMachine)' }}"
-			}, _#goReleaseCheck, _#checkGitClean, _#pullThroughProxy, _#failCLBuild]
+			}, _#goGenerate, _#goTest, _#goReleaseCheck, _#checkGitClean, _#failCLBuild]
 		}
 		mark_ci_success: {
 			"runs-on": _#linuxMachine
 			if:        "${{ \(_#isCLCITestBranch) }}"
 			needs:     "test"
-			steps: [_#writeCookiesFile, _#passCLBuild]
+			steps: [_#writeNetrcFile, _#passCLBuild]
 		}
 		delete_build_branch: {
 			"runs-on": _#linuxMachine
@@ -75,7 +64,7 @@ test: _#bashWorkflow & {
 			steps: [_#step & {
 				run: """
 							\(_#tempCueckooGitDir)
-							git push https://github.com/cuelang/cue :${GITHUB_REF#\(_#branchRefPrefix)}
+							git push https://github.com/myitcvscratch/cue :${GITHUB_REF#\(_#branchRefPrefix)}
 							"""
 			}]
 		}
@@ -112,7 +101,7 @@ test: _#bashWorkflow & {
 		run:  (_#gerrit._#setCodeReview & {
 			#args: {
 				message: "Build failed for ${{ runner.os }}-${{ matrix.go-version }}; see ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }} for more details"
-				labels: "Code-Review": -1
+				labels: "TryBot-Result": -1
 			}
 		}).res
 	}
@@ -121,7 +110,7 @@ test: _#bashWorkflow & {
 		run:  (_#gerrit._#setCodeReview & {
 			#args: {
 				message: "Build succeeded for ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}"
-				labels: "Code-Review": 1
+				labels: "TryBot-Result": 1
 			}
 		}).res
 	}
@@ -132,9 +121,9 @@ test: _#bashWorkflow & {
 			#args: {
 				tag:     "trybot"
 				message: string
-				labels?: "Code-Review": int
+				labels?: "TryBot-Result": int
 			}
-			res: "\(_#curl) -H \"Content-Type: application/json\" --request POST --data '\(encjson.Marshal(#args))' -b ~/.gitcookies https://cue-review.googlesource.com/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review"
+			res: "\(_#curl) -n -H \"Content-Type: application/json\" --request POST --data '\(encjson.Marshal(#args))' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review"
 		}
 	}
 }
@@ -154,13 +143,13 @@ repository_dispatch: _#bashWorkflow & {
 	jobs: {
 		"\(_#runtrybot)": _#dispatchJob & {
 			_#type: _#runtrybot
-			steps: [_#step & {
+			steps: [_#writeNetrcFile, _#step & {
 				name: "Trigger trybot"
 				run:  """
 								\(_#tempCueckooGitDir)
-								git fetch https://cue-review.googlesource.com/cue ${{ github.event.client_payload.payload.ref }}
+								git fetch https://review.gerrithub.io/a/myitcvscratch/cue ${{ github.event.client_payload.payload.ref }}
 								git checkout -b ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }} FETCH_HEAD
-								git push https://github.com/cuelang/cue ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }}
+								git push https://github.com/myitcvscratch/cue ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }}
 								"""
 			}]
 		}
@@ -208,7 +197,7 @@ release: _#bashWorkflow & {
 				with: version: _#latestStableGo
 			}, _#step & {
 				name: "Run GoReleaser"
-				env: GITHUB_TOKEN: "${{ secrets.ACTIONS_GITHUB_TOKEN }}"
+				env: GITHUB_TOKEN: "${{ secrets.CUECKOO_GITHUB_PAT }}"
 				uses: "goreleaser/goreleaser-action@v2"
 				with: {
 					args:    "release --rm-dist"
@@ -216,38 +205,42 @@ release: _#bashWorkflow & {
 				}
 			}]
 		}
-		docker: {
-			name:      "docker"
-			"runs-on": _#linuxMachine
-			steps: [_#checkoutCode, _#step & {
-				name: "Set version environment"
-				run: """
-					CUE_VERSION=$(echo ${GITHUB_REF##refs/tags/v})
-					echo \"CUE_VERSION=$CUE_VERSION\"
-					echo \"CUE_VERSION=$(echo $CUE_VERSION)\" >> $GITHUB_ENV
-					"""
-			}, _#step & {
-				name: "Push to Docker Hub"
-				env: {
-					DOCKER_BUILDKIT: 1
-					GOLANG_VERSION:  1.14
-					CUE_VERSION:     "${{ env.CUE_VERSION }}"
-				}
-				uses: "docker/build-push-action@v1"
-				with: {
-					tags:           "${{ env.CUE_VERSION }},latest"
-					repository:     "cuelang/cue"
-					username:       "${{ secrets.DOCKER_USERNAME }}"
-					password:       "${{ secrets.DOCKER_PASSWORD }}"
-					tag_with_ref:   false
-					tag_with_sha:   false
-					target:         "cue"
-					always_pull:    true
-					build_args:     "GOLANG_VERSION=${{ env.GOLANG_VERSION }},CUE_VERSION=v${{ env.CUE_VERSION }}"
-					add_git_labels: true
-				}
-			}]
-		}
+		// docker: {
+		//  name:      "docker"
+		//  "runs-on": _#linuxMachine
+		//  steps: [
+		//   _#checkoutCode,
+		//   _#step & {
+		//    name: "Set version environment"
+		//    run: """
+		//     CUE_VERSION=$(echo ${GITHUB_REF##refs/tags/v})
+		//     echo \"CUE_VERSION=$CUE_VERSION\"
+		//     echo \"CUE_VERSION=$(echo $CUE_VERSION)\" >> $GITHUB_ENV
+		//     """
+		//   },
+		//   _#step & {
+		//    name: "Push to Docker Hub"
+		//    env: {
+		//     DOCKER_BUILDKIT: 1
+		//     GOLANG_VERSION:  1.14
+		//     CUE_VERSION:     "${{ env.CUE_VERSION }}"
+		//    }
+		//    uses: "docker/build-push-action@v1"
+		//    with: {
+		//     tags:           "${{ env.CUE_VERSION }},latest"
+		//     repository:     "cuelang/cue"
+		//     username:       "${{ secrets.DOCKER_USERNAME }}"
+		//     password:       "${{ secrets.DOCKER_PASSWORD }}"
+		//     tag_with_ref:   false
+		//     tag_with_sha:   false
+		//     target:         "cue"
+		//     always_pull:    true
+		//     build_args:     "GOLANG_VERSION=${{ env.GOLANG_VERSION }},CUE_VERSION=v${{ env.CUE_VERSION }}"
+		//     add_git_labels: true
+		//    }
+		//   },
+		//  ]
+		// }
 	}
 }
 tip_triggers: _#bashWorkflow & {
@@ -303,8 +296,8 @@ _#testStrategy: {
 	"fail-fast": false
 	matrix: {
 		// Use a stable version of 1.14.x for go generate
-		"go-version": [_#codeGenGo, _#latestStableGo, "1.16"]
-		os: [_#linuxMachine, _#macosMachine, _#windowsMachine]
+		"go-version": ["1.16"]
+		os: [_#linuxMachine]
 	}
 }
 _#setGoBuildTags: _#step & {
@@ -358,9 +351,16 @@ _#checkGitClean: _#step & {
 	name: "Check that git is clean post generate and tests"
 	run:  "test -z \"$(git status --porcelain)\" || (git status; git diff; false)"
 }
-_#writeCookiesFile: _#step & {
-	name: "Write the gitcookies file"
-	run:  "echo \"${{ secrets.gerritCookie }}\" > ~/.gitcookies"
+_#writeNetrcFile: _#step & {
+	name: "Write netrc file for cueckoo Gerrithub"
+	run: """
+		cat <<EOD > ~/.netrc
+		machine review.gerrithub.io
+		login cueckoo
+		password ${{ secrets.CUECKOO_GERRITHUB_PASSWORD }}
+		EOD
+		chmod 600 ~/.netrc
+		"""
 }
 _#branchRefPrefix: "refs/heads/"
 _#tempCueckooGitDir: """
@@ -1125,13 +1125,13 @@ import "strings"
             "runs-on": (string){ "ubuntu-18.04" }
             steps: (#list){
               0: (#struct){
-                name: (string){ "Write the gitcookies file" }
-                run: (string){ "echo \"${{ secrets.gerritCookie }}\" > ~/.gitcookies" }
+                name: (string){ "Write netrc file for cueckoo Gerrithub" }
+                run: (string){ "cat <<EOD > ~/.netrc\nmachine review.gerrithub.io\nlogin cueckoo\npassword ${{ secrets.CUECKOO_GERRITHUB_PASSWORD }}\nEOD\nchmod 600 ~/.netrc" }
                 if: (string){ "${{ startsWith(github.ref, 'refs/heads/ci/') }}" }
               }
               1: (#struct){
                 name: (string){ "Update Gerrit CL message with starting message" }
-                run: (string){ "curl -f -s -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Started the build... see progress at ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\"}' -b ~/.gitcookies https://cue-review.googlesource.com/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
+                run: (string){ "curl -f -s -n -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Started the build... see progress at ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\"}' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
                 if: (string){ "${{ startsWith(github.ref, 'refs/heads/ci/') }}" }
               }
             }
@@ -1147,22 +1147,18 @@ import "strings"
               "fail-fast": (bool){ false }
               matrix: (#struct){
                 "go-version": (#list){
-                  0: (string){ "1.14.14" }
-                  1: (string){ "1.15.8" }
-                  2: (string){ "1.16" }
+                  0: (string){ "1.16" }
                 }
                 os: (#list){
                   0: (string){ "ubuntu-18.04" }
-                  1: (string){ "macos-10.15" }
-                  2: (string){ "windows-2019" }
                 }
               }
             }
             "runs-on": (string){ "${{ matrix.os }}" }
             steps: (#list){
               0: (#struct){
-                name: (string){ "Write the gitcookies file" }
-                run: (string){ "echo \"${{ secrets.gerritCookie }}\" > ~/.gitcookies" }
+                name: (string){ "Write netrc file for cueckoo Gerrithub" }
+                run: (string){ "cat <<EOD > ~/.netrc\nmachine review.gerrithub.io\nlogin cueckoo\npassword ${{ secrets.CUECKOO_GERRITHUB_PASSWORD }}\nEOD\nchmod 600 ~/.netrc" }
               }
               1: (#struct){
                 name: (string){ "Install Go" }
@@ -1201,27 +1197,17 @@ import "strings"
                 run: (string){ "go test ./..." }
               }
               7: (#struct){
-                name: (string){ "Test with -race" }
-                run: (string){ "go test -race ./..." }
-                if: (string){ "${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/ci/') && matrix.go-version == '1.15.8' && matrix.os == 'ubuntu-18.04' }}" }
-              }
-              8: (#struct){
                 name: (string){ "gorelease check" }
                 run: (string){ "go run golang.org/x/exp/cmd/gorelease" }
               }
-              9: (#struct){
+              8: (#struct){
                 name: (string){ "Check that git is clean post generate and tests" }
                 run: (string){ "test -z \"$(git status --porcelain)\" || (git status; git diff; false)" }
               }
-              10: (#struct){
-                name: (string){ "Pull this commit through the proxy on master" }
-                run: (string){ "v=$(git rev-parse HEAD)\ncd $(mktemp -d)\ngo mod init mod.com\nGOPROXY=https://proxy.golang.org go get -d cuelang.org/go/cmd/cue@$v" }
-                if: (string){ "${{ github.ref == 'refs/heads/master' }}" }
-              }
-              11: (#struct){
+              9: (#struct){
                 if: (string){ "${{ startsWith(github.ref, 'refs/heads/ci/') && failure() }}" }
                 name: (string){ "Post any failures for this matrix entry" }
-                run: (string){ "curl -f -s -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build failed for ${{ runner.os }}-${{ matrix.go-version }}; see ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }} for more details\",\"labels\":{\"Code-Review\":-1}}' -b ~/.gitcookies https://cue-review.googlesource.com/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
+                run: (string){ "curl -f -s -n -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build failed for ${{ runner.os }}-${{ matrix.go-version }}; see ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }} for more details\",\"labels\":{\"TryBot-Result\":-1}}' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
               }
             }
             defaults: (#struct){
@@ -1236,12 +1222,12 @@ import "strings"
             needs: (string){ "test" }
             steps: (#list){
               0: (#struct){
-                name: (string){ "Write the gitcookies file" }
-                run: (string){ "echo \"${{ secrets.gerritCookie }}\" > ~/.gitcookies" }
+                name: (string){ "Write netrc file for cueckoo Gerrithub" }
+                run: (string){ "cat <<EOD > ~/.netrc\nmachine review.gerrithub.io\nlogin cueckoo\npassword ${{ secrets.CUECKOO_GERRITHUB_PASSWORD }}\nEOD\nchmod 600 ~/.netrc" }
               }
               1: (#struct){
                 name: (string){ "Update Gerrit CL message with success message" }
-                run: (string){ "curl -f -s -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build succeeded for ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\",\"labels\":{\"Code-Review\":1}}' -b ~/.gitcookies https://cue-review.googlesource.com/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
+                run: (string){ "curl -f -s -n -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build succeeded for ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\",\"labels\":{\"TryBot-Result\":1}}' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
               }
             }
             defaults: (#struct){
@@ -1256,7 +1242,7 @@ import "strings"
             needs: (string){ "test" }
             steps: (#list){
               0: (#struct){
-                run: (string){ "mkdir tmpgit\ncd tmpgit\ngit init\ngit config user.name cueckoo\ngit config user.email cueckoo@gmail.com\ngit config http.https://github.com/.extraheader \"AUTHORIZATION: basic $(echo -n cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} | base64)\"\ngit push https://github.com/cuelang/cue :${GITHUB_REF#refs/heads/}" }
+                run: (string){ "mkdir tmpgit\ncd tmpgit\ngit init\ngit config user.name cueckoo\ngit config user.email cueckoo@gmail.com\ngit config http.https://github.com/.extraheader \"AUTHORIZATION: basic $(echo -n cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} | base64)\"\ngit push https://github.com/myitcvscratch/cue :${GITHUB_REF#refs/heads/}" }
               }
             }
             defaults: (#struct){
@@ -1286,16 +1272,16 @@ import "strings"
         }
         _#startCLBuild(:ci): (#struct){
           name: (string){ "Update Gerrit CL message with starting message" }
-          run: (string){ "curl -f -s -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Started the build... see progress at ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\"}' -b ~/.gitcookies https://cue-review.googlesource.com/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
+          run: (string){ "curl -f -s -n -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Started the build... see progress at ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\"}' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
         }
         _#failCLBuild(:ci): (#struct){
           if: (string){ "${{ startsWith(github.ref, 'refs/heads/ci/') && failure() }}" }
           name: (string){ "Post any failures for this matrix entry" }
-          run: (string){ "curl -f -s -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build failed for ${{ runner.os }}-${{ matrix.go-version }}; see ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }} for more details\",\"labels\":{\"Code-Review\":-1}}' -b ~/.gitcookies https://cue-review.googlesource.com/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
+          run: (string){ "curl -f -s -n -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build failed for ${{ runner.os }}-${{ matrix.go-version }}; see ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }} for more details\",\"labels\":{\"TryBot-Result\":-1}}' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
         }
         _#passCLBuild(:ci): (#struct){
           name: (string){ "Update Gerrit CL message with success message" }
-          run: (string){ "curl -f -s -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build succeeded for ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\",\"labels\":{\"Code-Review\":1}}' -b ~/.gitcookies https://cue-review.googlesource.com/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
+          run: (string){ "curl -f -s -n -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build succeeded for ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\",\"labels\":{\"TryBot-Result\":1}}' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
         }
         _#gerrit(:ci): (#struct){
           _#setCodeReview(:ci): (#struct){
@@ -1305,7 +1291,7 @@ import "strings"
             }
             res: (_|_){
               // [incomplete] invalid interpolation: cannot convert incomplete value "string" to JSON:
-              //     ./workflows.cue:129:9
+              //     ./workflows.cue:118:9
             }
           }
         }
@@ -1359,8 +1345,12 @@ import "strings"
             if: (string){ "${{ github.event.client_payload.type == 'runtrybot' }}" }
             steps: (#list){
               0: (#struct){
+                name: (string){ "Write netrc file for cueckoo Gerrithub" }
+                run: (string){ "cat <<EOD > ~/.netrc\nmachine review.gerrithub.io\nlogin cueckoo\npassword ${{ secrets.CUECKOO_GERRITHUB_PASSWORD }}\nEOD\nchmod 600 ~/.netrc" }
+              }
+              1: (#struct){
                 name: (string){ "Trigger trybot" }
-                run: (string){ "mkdir tmpgit\ncd tmpgit\ngit init\ngit config user.name cueckoo\ngit config user.email cueckoo@gmail.com\ngit config http.https://github.com/.extraheader \"AUTHORIZATION: basic $(echo -n cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} | base64)\"\ngit fetch https://cue-review.googlesource.com/cue ${{ github.event.client_payload.payload.ref }}\ngit checkout -b ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }} FETCH_HEAD\ngit push https://github.com/cuelang/cue ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }}" }
+                run: (string){ "mkdir tmpgit\ncd tmpgit\ngit init\ngit config user.name cueckoo\ngit config user.email cueckoo@gmail.com\ngit config http.https://github.com/.extraheader \"AUTHORIZATION: basic $(echo -n cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} | base64)\"\ngit fetch https://review.gerrithub.io/a/myitcvscratch/cue ${{ github.event.client_payload.payload.ref }}\ngit checkout -b ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }} FETCH_HEAD\ngit push https://github.com/myitcvscratch/cue ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }}" }
               }
             }
             defaults: (#struct){
@@ -1429,7 +1419,7 @@ import "strings"
           _#type(:ci): (string){ string }
           if: (_|_){
             // [incomplete] workflows.1.schema._#dispatchJob.if: invalid interpolation: non-concrete value string (type string):
-            //     ./workflows.cue:142:14
+            //     ./workflows.cue:131:14
           }
         }
         name: (string){ "Repository Dispatch" }
@@ -1502,52 +1492,12 @@ import "strings"
               2: (#struct){
                 name: (string){ "Run GoReleaser" }
                 env: (#struct){
-                  GITHUB_TOKEN: (string){ "${{ secrets.ACTIONS_GITHUB_TOKEN }}" }
+                  GITHUB_TOKEN: (string){ "${{ secrets.CUECKOO_GITHUB_PAT }}" }
                 }
                 uses: (string){ "goreleaser/goreleaser-action@v2" }
                 with: (#struct){
                   args: (string){ "release --rm-dist" }
                   version: (string){ "v0.155.1" }
-                }
-              }
-            }
-            defaults: (#struct){
-              run: (#struct){
-                shell: (string){ "bash" }
-              }
-            }
-          }
-          docker: (#struct){
-            name: (string){ "docker" }
-            "runs-on": (string){ "ubuntu-18.04" }
-            steps: (#list){
-              0: (#struct){
-                name: (string){ "Checkout code" }
-                uses: (string){ "actions/checkout@v2" }
-              }
-              1: (#struct){
-                name: (string){ "Set version environment" }
-                run: (string){ "CUE_VERSION=$(echo ${GITHUB_REF##refs/tags/v})\necho \"CUE_VERSION=$CUE_VERSION\"\necho \"CUE_VERSION=$(echo $CUE_VERSION)\" >> $GITHUB_ENV" }
-              }
-              2: (#struct){
-                name: (string){ "Push to Docker Hub" }
-                env: (#struct){
-                  DOCKER_BUILDKIT: (int){ 1 }
-                  GOLANG_VERSION: (float){ 1.14 }
-                  CUE_VERSION: (string){ "${{ env.CUE_VERSION }}" }
-                }
-                uses: (string){ "docker/build-push-action@v1" }
-                with: (#struct){
-                  tags: (string){ "${{ env.CUE_VERSION }},latest" }
-                  repository: (string){ "cuelang/cue" }
-                  username: (string){ "${{ secrets.DOCKER_USERNAME }}" }
-                  password: (string){ "${{ secrets.DOCKER_PASSWORD }}" }
-                  tag_with_ref: (bool){ false }
-                  tag_with_sha: (bool){ false }
-                  target: (string){ "cue" }
-                  always_pull: (bool){ true }
-                  build_args: (string){ "GOLANG_VERSION=${{ env.GOLANG_VERSION }},CUE_VERSION=v${{ env.CUE_VERSION }}" }
-                  add_git_labels: (bool){ true }
                 }
               }
             }
@@ -1563,224 +1513,6 @@ import "strings"
           push: (#struct){
             tags: (#list){
               0: (string){ "v*" }
-            }
-          }
-        }
-      }
-    }
-    3: (struct){
-      file: (string){ "tip_triggers.yml" }
-      schema: (#struct){
-        #architecture: (string){ |((string){ "ARM32" }, (string){ "x64" }, (string){ "x86" }) }
-        #branch: (list){
-          0: (string){ strings.MinRunes(1) }
-        }
-        #configuration: ((bool|string|list|struct|number)){ |((string){ string }, (number){ number }, (bool){ bool }, (#struct){
-          }, (list){
-          }) }
-        #container: (#struct){
-          image: (string){ string }
-        }
-        #defaults: (#struct){
-        }
-        #env: (#struct){
-        }
-        #environment: (#struct){
-          name: (string){ string }
-        }
-        #event: (string){ |((string){ "check_run" }, (string){ "check_suite" }, (string){ "create" }, (string){ "delete" }, (string){ "deployment" }, (string){ "deployment_status" }, (string){ "fork" }, (string){ "gollum" }, (string){ "issue_comment" }, (string){ "issues" }, (string){ "label" }, (string){ "member" }, (string){ "milestone" }, (string){ "page_build" }, (string){ "project" }, (string){ "project_card" }, (string){ "project_column" }, (string){ "public" }, (string){ "pull_request" }, (string){ "pull_request_review" }, (string){ "pull_request_review_comment" }, (string){ "pull_request_target" }, (string){ "push" }, (string){ "registry_package" }, (string){ "release" }, (string){ "status" }, (string){ "watch" }, (string){ "workflow_dispatch" }, (string){ "workflow_run" }, (string){ "repository_dispatch" }) }
-        #eventObject: ((null|struct)){ |((null){ null }, (#struct){
-          }) }
-        #expressionSyntax: (string){ =~"^\\$\\{\\{.*\\}\\}$" }
-        #globs: (list){
-          0: (string){ strings.MinRunes(1) }
-        }
-        #machine: (string){ |((string){ "linux" }, (string){ "macos" }, (string){ "windows" }) }
-        #name: (string){ =~"^[_a-zA-Z][a-zA-Z0-9_-]*$" }
-        #path: (list){
-          0: (string){ strings.MinRunes(1) }
-        }
-        #ref: ((null|struct)){ |((null){ null }, (#struct){
-          }) }
-        #shell: (string){ |((string){ string }, (string){ "bash" }, (string){ "pwsh" }, (string){ "python" }, (string){ "sh" }, (string){ "cmd" }, (string){ "powershell" }) }
-        #types: (list){
-          0: (_){ _ }
-        }
-        #: (#struct){
-          "working-directory": (string){ string }
-        }
-        jobs: (#struct){
-          push: (#struct){
-            "runs-on": (string){ "ubuntu-18.04" }
-            steps: (#list){
-              0: (#struct){
-                name: (string){ "Rebuild tip.cuelang.org" }
-                run: (string){ "curl -f -s -X POST -d {} https://api.netlify.com/build_hooks/${{ secrets.CuelangOrgTipRebuildHook }}" }
-              }
-              1: (#struct){
-                name: (string){ "Trigger unity build" }
-                run: (string){ "curl -f -s -H \"Content-Type: application/json\" -u cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} --request POST --data-binary \"{\\\"event_type\\\": \\\"Check against ${GITHUB_SHA}\\\", \\\"client_payload\\\": {\\\"type\\\": \\\"unity\\\", \\\"payload\\\": {\\\"versions\\\": \\\"\\\\\\\"commit:${GITHUB_SHA}\\\\\\\"\\\"}}}\" https://api.github.com/repos/cue-sh/unity/dispatches" }
-              }
-            }
-            defaults: (#struct){
-              run: (#struct){
-                shell: (string){ "bash" }
-              }
-            }
-          }
-        }
-        name: (string){ "Push to tip triggers" }
-        on: (#struct){
-          push: (#struct){
-            branches: (#list){
-              0: (string){ "master" }
-            }
-          }
-        }
-      }
-    }
-    4: (struct){
-      file: (string){ "new_version_triggers.yml" }
-      schema: (#struct){
-        #architecture: (string){ |((string){ "ARM32" }, (string){ "x64" }, (string){ "x86" }) }
-        #branch: (list){
-          0: (string){ strings.MinRunes(1) }
-        }
-        #configuration: ((bool|string|list|struct|number)){ |((string){ string }, (number){ number }, (bool){ bool }, (#struct){
-          }, (list){
-          }) }
-        #container: (#struct){
-          image: (string){ string }
-        }
-        #defaults: (#struct){
-        }
-        #env: (#struct){
-        }
-        #environment: (#struct){
-          name: (string){ string }
-        }
-        #event: (string){ |((string){ "check_run" }, (string){ "check_suite" }, (string){ "create" }, (string){ "delete" }, (string){ "deployment" }, (string){ "deployment_status" }, (string){ "fork" }, (string){ "gollum" }, (string){ "issue_comment" }, (string){ "issues" }, (string){ "label" }, (string){ "member" }, (string){ "milestone" }, (string){ "page_build" }, (string){ "project" }, (string){ "project_card" }, (string){ "project_column" }, (string){ "public" }, (string){ "pull_request" }, (string){ "pull_request_review" }, (string){ "pull_request_review_comment" }, (string){ "pull_request_target" }, (string){ "push" }, (string){ "registry_package" }, (string){ "release" }, (string){ "status" }, (string){ "watch" }, (string){ "workflow_dispatch" }, (string){ "workflow_run" }, (string){ "repository_dispatch" }) }
-        #eventObject: ((null|struct)){ |((null){ null }, (#struct){
-          }) }
-        #expressionSyntax: (string){ =~"^\\$\\{\\{.*\\}\\}$" }
-        #globs: (list){
-          0: (string){ strings.MinRunes(1) }
-        }
-        #machine: (string){ |((string){ "linux" }, (string){ "macos" }, (string){ "windows" }) }
-        #name: (string){ =~"^[_a-zA-Z][a-zA-Z0-9_-]*$" }
-        #path: (list){
-          0: (string){ strings.MinRunes(1) }
-        }
-        #ref: ((null|struct)){ |((null){ null }, (#struct){
-          }) }
-        #shell: (string){ |((string){ string }, (string){ "bash" }, (string){ "pwsh" }, (string){ "python" }, (string){ "sh" }, (string){ "cmd" }, (string){ "powershell" }) }
-        #types: (list){
-          0: (_){ _ }
-        }
-        #: (#struct){
-          "working-directory": (string){ string }
-        }
-        jobs: (#struct){
-          push: (#struct){
-            "runs-on": (string){ "ubuntu-18.04" }
-            steps: (#list){
-              0: (#struct){
-                name: (string){ "Rebuild tip.cuelang.org" }
-                run: (string){ "curl -f -s -H \"Content-Type: application/json\" -u cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} --request POST --data-binary \"{\\\"event_type\\\": \\\"Re-test post release of ${GITHUB_REF##refs/tags/}\\\"}\" https://api.github.com/repos/cuelang/cuelang.org/dispatches" }
-              }
-              1: (#struct){
-                name: (string){ "Trigger unity build" }
-                run: (string){ "curl -f -s -H \"Content-Type: application/json\" -u cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} --request POST --data-binary \"{\\\"event_type\\\": \\\"Check against CUE ${GITHUB_REF##refs/tags/}\\\", \\\"client_payload\\\": {\\\"type\\\": \\\"unity\\\", \\\"payload\\\": {\\\"versions\\\": \\\"\\\\\\\"${GITHUB_REF##refs/tags/}\\\\\\\"}}}\" https://api.github.com/repos/cue-sh/unity/dispatches" }
-              }
-            }
-            defaults: (#struct){
-              run: (#struct){
-                shell: (string){ "bash" }
-              }
-            }
-          }
-        }
-        name: (string){ "New release triggers" }
-        on: (#struct){
-          push: (#struct){
-            tags: (#list){
-              0: (string){ "v*" }
-            }
-          }
-        }
-      }
-    }
-    5: (struct){
-      file: (string){ "mirror.yml" }
-      schema: (#struct){
-        #architecture: (string){ |((string){ "ARM32" }, (string){ "x64" }, (string){ "x86" }) }
-        #branch: (list){
-          0: (string){ strings.MinRunes(1) }
-        }
-        #configuration: ((bool|string|list|struct|number)){ |((string){ string }, (number){ number }, (bool){ bool }, (#struct){
-          }, (list){
-          }) }
-        #container: (#struct){
-          image: (string){ string }
-        }
-        #defaults: (#struct){
-        }
-        #env: (#struct){
-        }
-        #environment: (#struct){
-          name: (string){ string }
-        }
-        #event: (string){ |((string){ "check_run" }, (string){ "check_suite" }, (string){ "create" }, (string){ "delete" }, (string){ "deployment" }, (string){ "deployment_status" }, (string){ "fork" }, (string){ "gollum" }, (string){ "issue_comment" }, (string){ "issues" }, (string){ "label" }, (string){ "member" }, (string){ "milestone" }, (string){ "page_build" }, (string){ "project" }, (string){ "project_card" }, (string){ "project_column" }, (string){ "public" }, (string){ "pull_request" }, (string){ "pull_request_review" }, (string){ "pull_request_review_comment" }, (string){ "pull_request_target" }, (string){ "push" }, (string){ "registry_package" }, (string){ "release" }, (string){ "status" }, (string){ "watch" }, (string){ "workflow_dispatch" }, (string){ "workflow_run" }, (string){ "repository_dispatch" }) }
-        #eventObject: ((null|struct)){ |((null){ null }, (#struct){
-          }) }
-        #expressionSyntax: (string){ =~"^\\$\\{\\{.*\\}\\}$" }
-        #globs: (list){
-          0: (string){ strings.MinRunes(1) }
-        }
-        #machine: (string){ |((string){ "linux" }, (string){ "macos" }, (string){ "windows" }) }
-        #name: (string){ =~"^[_a-zA-Z][a-zA-Z0-9_-]*$" }
-        #path: (list){
-          0: (string){ strings.MinRunes(1) }
-        }
-        #ref: ((null|struct)){ |((null){ null }, (#struct){
-          }) }
-        #shell: (string){ |((string){ string }, (string){ "bash" }, (string){ "pwsh" }, (string){ "python" }, (string){ "sh" }, (string){ "cmd" }, (string){ "powershell" }) }
-        #types: (list){
-          0: (_){ _ }
-        }
-        #: (#struct){
-          "working-directory": (string){ string }
-        }
-        jobs: (#struct){
-          mirror: (#struct){
-            "runs-on": (string){ "ubuntu-18.04" }
-            steps: (#list){
-              _#name(:ci): (string){ "Mirror Gerrit to GitHub" }
-              _#cmd(:ci): (string){ "github" }
-              0: (#struct){
-                name: (string){ "Checkout code" }
-                uses: (string){ "actions/checkout@v2" }
-              }
-              1: (#struct){
-                name: (string){ "Mirror Gerrit to GitHub" }
-                run: (string){
-                  "cd _scripts\ndocker run --rm -v $PWD/cache:/root/copybara/cache -v $PWD:/usr/src/app --entrypoint=\"\" cueckoo/copybara:afc4ae03eed00b0c9d7415141cd1b5dfa583da7c bash -c \" \\\n\tset -eu; \\\n\techo \\\"${{ secrets.gerritCookie }}\\\" > ~/.gitcookies; \\\n\tchmod 600 ~/.gitcookies; \\\n\tgit config --global user.name cueckoo; \\\n\tgit config --global user.email cueckoo@gmail.com; \\\n\tgit config --global http.cookiefile \\$HOME/.gitcookies; \\\n  \techo https://cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }}@github.com > ~/.git-credentials; \\\n\tchmod 600 ~/.git-credentials; \\\n\tjava -jar /opt/copybara/copybara_deploy.jar migrate copy.bara.sky github; \\\n\t\""
-                  _#cmd(:ci): (string){ "github" }
-                }
-              }
-            }
-            defaults: (#struct){
-              run: (#struct){
-                shell: (string){ "bash" }
-              }
-            }
-          }
-        }
-        name: (string){ "Scheduled repo mirror" }
-        on: (#struct){
-          schedule: (#list){
-            0: (#struct){
-              cron: (string){ "*/30 * * * *" }
             }
           }
         }
@@ -1831,13 +1563,13 @@ import "strings"
         "runs-on": (string){ "ubuntu-18.04" }
         steps: (#list){
           0: (#struct){
-            name: (string){ "Write the gitcookies file" }
-            run: (string){ "echo \"${{ secrets.gerritCookie }}\" > ~/.gitcookies" }
+            name: (string){ "Write netrc file for cueckoo Gerrithub" }
+            run: (string){ "cat <<EOD > ~/.netrc\nmachine review.gerrithub.io\nlogin cueckoo\npassword ${{ secrets.CUECKOO_GERRITHUB_PASSWORD }}\nEOD\nchmod 600 ~/.netrc" }
             if: (string){ "${{ startsWith(github.ref, 'refs/heads/ci/') }}" }
           }
           1: (#struct){
             name: (string){ "Update Gerrit CL message with starting message" }
-            run: (string){ "curl -f -s -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Started the build... see progress at ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\"}' -b ~/.gitcookies https://cue-review.googlesource.com/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
+            run: (string){ "curl -f -s -n -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Started the build... see progress at ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\"}' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
             if: (string){ "${{ startsWith(github.ref, 'refs/heads/ci/') }}" }
           }
         }
@@ -1853,22 +1585,18 @@ import "strings"
           "fail-fast": (bool){ false }
           matrix: (#struct){
             "go-version": (#list){
-              0: (string){ "1.14.14" }
-              1: (string){ "1.15.8" }
-              2: (string){ "1.16" }
+              0: (string){ "1.16" }
             }
             os: (#list){
               0: (string){ "ubuntu-18.04" }
-              1: (string){ "macos-10.15" }
-              2: (string){ "windows-2019" }
             }
           }
         }
         "runs-on": (string){ "${{ matrix.os }}" }
         steps: (#list){
           0: (#struct){
-            name: (string){ "Write the gitcookies file" }
-            run: (string){ "echo \"${{ secrets.gerritCookie }}\" > ~/.gitcookies" }
+            name: (string){ "Write netrc file for cueckoo Gerrithub" }
+            run: (string){ "cat <<EOD > ~/.netrc\nmachine review.gerrithub.io\nlogin cueckoo\npassword ${{ secrets.CUECKOO_GERRITHUB_PASSWORD }}\nEOD\nchmod 600 ~/.netrc" }
           }
           1: (#struct){
             name: (string){ "Install Go" }
@@ -1907,27 +1635,17 @@ import "strings"
             run: (string){ "go test ./..." }
           }
           7: (#struct){
-            name: (string){ "Test with -race" }
-            run: (string){ "go test -race ./..." }
-            if: (string){ "${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/ci/') && matrix.go-version == '1.15.8' && matrix.os == 'ubuntu-18.04' }}" }
-          }
-          8: (#struct){
             name: (string){ "gorelease check" }
             run: (string){ "go run golang.org/x/exp/cmd/gorelease" }
           }
-          9: (#struct){
+          8: (#struct){
             name: (string){ "Check that git is clean post generate and tests" }
             run: (string){ "test -z \"$(git status --porcelain)\" || (git status; git diff; false)" }
           }
-          10: (#struct){
-            name: (string){ "Pull this commit through the proxy on master" }
-            run: (string){ "v=$(git rev-parse HEAD)\ncd $(mktemp -d)\ngo mod init mod.com\nGOPROXY=https://proxy.golang.org go get -d cuelang.org/go/cmd/cue@$v" }
-            if: (string){ "${{ github.ref == 'refs/heads/master' }}" }
-          }
-          11: (#struct){
+          9: (#struct){
             if: (string){ "${{ startsWith(github.ref, 'refs/heads/ci/') && failure() }}" }
             name: (string){ "Post any failures for this matrix entry" }
-            run: (string){ "curl -f -s -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build failed for ${{ runner.os }}-${{ matrix.go-version }}; see ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }} for more details\",\"labels\":{\"Code-Review\":-1}}' -b ~/.gitcookies https://cue-review.googlesource.com/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
+            run: (string){ "curl -f -s -n -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build failed for ${{ runner.os }}-${{ matrix.go-version }}; see ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }} for more details\",\"labels\":{\"TryBot-Result\":-1}}' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
           }
         }
         defaults: (#struct){
@@ -1942,12 +1660,12 @@ import "strings"
         needs: (string){ "test" }
         steps: (#list){
           0: (#struct){
-            name: (string){ "Write the gitcookies file" }
-            run: (string){ "echo \"${{ secrets.gerritCookie }}\" > ~/.gitcookies" }
+            name: (string){ "Write netrc file for cueckoo Gerrithub" }
+            run: (string){ "cat <<EOD > ~/.netrc\nmachine review.gerrithub.io\nlogin cueckoo\npassword ${{ secrets.CUECKOO_GERRITHUB_PASSWORD }}\nEOD\nchmod 600 ~/.netrc" }
           }
           1: (#struct){
             name: (string){ "Update Gerrit CL message with success message" }
-            run: (string){ "curl -f -s -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build succeeded for ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\",\"labels\":{\"Code-Review\":1}}' -b ~/.gitcookies https://cue-review.googlesource.com/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
+            run: (string){ "curl -f -s -n -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build succeeded for ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\",\"labels\":{\"TryBot-Result\":1}}' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
           }
         }
         defaults: (#struct){
@@ -1962,7 +1680,7 @@ import "strings"
         needs: (string){ "test" }
         steps: (#list){
           0: (#struct){
-            run: (string){ "mkdir tmpgit\ncd tmpgit\ngit init\ngit config user.name cueckoo\ngit config user.email cueckoo@gmail.com\ngit config http.https://github.com/.extraheader \"AUTHORIZATION: basic $(echo -n cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} | base64)\"\ngit push https://github.com/cuelang/cue :${GITHUB_REF#refs/heads/}" }
+            run: (string){ "mkdir tmpgit\ncd tmpgit\ngit init\ngit config user.name cueckoo\ngit config user.email cueckoo@gmail.com\ngit config http.https://github.com/.extraheader \"AUTHORIZATION: basic $(echo -n cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} | base64)\"\ngit push https://github.com/myitcvscratch/cue :${GITHUB_REF#refs/heads/}" }
           }
         }
         defaults: (#struct){
@@ -1992,16 +1710,16 @@ import "strings"
     }
     _#startCLBuild(:ci): (#struct){
       name: (string){ "Update Gerrit CL message with starting message" }
-      run: (string){ "curl -f -s -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Started the build... see progress at ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\"}' -b ~/.gitcookies https://cue-review.googlesource.com/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
+      run: (string){ "curl -f -s -n -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Started the build... see progress at ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\"}' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
     }
     _#failCLBuild(:ci): (#struct){
       if: (string){ "${{ startsWith(github.ref, 'refs/heads/ci/') && failure() }}" }
       name: (string){ "Post any failures for this matrix entry" }
-      run: (string){ "curl -f -s -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build failed for ${{ runner.os }}-${{ matrix.go-version }}; see ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }} for more details\",\"labels\":{\"Code-Review\":-1}}' -b ~/.gitcookies https://cue-review.googlesource.com/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
+      run: (string){ "curl -f -s -n -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build failed for ${{ runner.os }}-${{ matrix.go-version }}; see ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }} for more details\",\"labels\":{\"TryBot-Result\":-1}}' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
     }
     _#passCLBuild(:ci): (#struct){
       name: (string){ "Update Gerrit CL message with success message" }
-      run: (string){ "curl -f -s -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build succeeded for ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\",\"labels\":{\"Code-Review\":1}}' -b ~/.gitcookies https://cue-review.googlesource.com/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
+      run: (string){ "curl -f -s -n -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build succeeded for ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\",\"labels\":{\"TryBot-Result\":1}}' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
     }
     _#gerrit(:ci): (#struct){
       _#setCodeReview(:ci): (#struct){
@@ -2011,7 +1729,7 @@ import "strings"
         }
         res: (_|_){
           // [incomplete] invalid interpolation: cannot convert incomplete value "string" to JSON:
-          //     ./workflows.cue:129:9
+          //     ./workflows.cue:118:9
         }
       }
     }
@@ -2062,8 +1780,12 @@ import "strings"
         if: (string){ "${{ github.event.client_payload.type == 'runtrybot' }}" }
         steps: (#list){
           0: (#struct){
+            name: (string){ "Write netrc file for cueckoo Gerrithub" }
+            run: (string){ "cat <<EOD > ~/.netrc\nmachine review.gerrithub.io\nlogin cueckoo\npassword ${{ secrets.CUECKOO_GERRITHUB_PASSWORD }}\nEOD\nchmod 600 ~/.netrc" }
+          }
+          1: (#struct){
             name: (string){ "Trigger trybot" }
-            run: (string){ "mkdir tmpgit\ncd tmpgit\ngit init\ngit config user.name cueckoo\ngit config user.email cueckoo@gmail.com\ngit config http.https://github.com/.extraheader \"AUTHORIZATION: basic $(echo -n cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} | base64)\"\ngit fetch https://cue-review.googlesource.com/cue ${{ github.event.client_payload.payload.ref }}\ngit checkout -b ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }} FETCH_HEAD\ngit push https://github.com/cuelang/cue ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }}" }
+            run: (string){ "mkdir tmpgit\ncd tmpgit\ngit init\ngit config user.name cueckoo\ngit config user.email cueckoo@gmail.com\ngit config http.https://github.com/.extraheader \"AUTHORIZATION: basic $(echo -n cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} | base64)\"\ngit fetch https://review.gerrithub.io/a/myitcvscratch/cue ${{ github.event.client_payload.payload.ref }}\ngit checkout -b ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }} FETCH_HEAD\ngit push https://github.com/myitcvscratch/cue ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }}" }
           }
         }
         defaults: (#struct){
@@ -2132,7 +1854,7 @@ import "strings"
       _#type(:ci): (string){ string }
       if: (_|_){
         // [incomplete] repository_dispatch._#dispatchJob.if: invalid interpolation: non-concrete value string (type string):
-        //     ./workflows.cue:142:14
+        //     ./workflows.cue:131:14
       }
     }
     name: (string){ "Repository Dispatch" }
@@ -2275,52 +1997,12 @@ import "strings"
           2: (#struct){
             name: (string){ "Run GoReleaser" }
             env: (#struct){
-              GITHUB_TOKEN: (string){ "${{ secrets.ACTIONS_GITHUB_TOKEN }}" }
+              GITHUB_TOKEN: (string){ "${{ secrets.CUECKOO_GITHUB_PAT }}" }
             }
             uses: (string){ "goreleaser/goreleaser-action@v2" }
             with: (#struct){
               args: (string){ "release --rm-dist" }
               version: (string){ "v0.155.1" }
-            }
-          }
-        }
-        defaults: (#struct){
-          run: (#struct){
-            shell: (string){ "bash" }
-          }
-        }
-      }
-      docker: (#struct){
-        name: (string){ "docker" }
-        "runs-on": (string){ "ubuntu-18.04" }
-        steps: (#list){
-          0: (#struct){
-            name: (string){ "Checkout code" }
-            uses: (string){ "actions/checkout@v2" }
-          }
-          1: (#struct){
-            name: (string){ "Set version environment" }
-            run: (string){ "CUE_VERSION=$(echo ${GITHUB_REF##refs/tags/v})\necho \"CUE_VERSION=$CUE_VERSION\"\necho \"CUE_VERSION=$(echo $CUE_VERSION)\" >> $GITHUB_ENV" }
-          }
-          2: (#struct){
-            name: (string){ "Push to Docker Hub" }
-            env: (#struct){
-              DOCKER_BUILDKIT: (int){ 1 }
-              GOLANG_VERSION: (float){ 1.14 }
-              CUE_VERSION: (string){ "${{ env.CUE_VERSION }}" }
-            }
-            uses: (string){ "docker/build-push-action@v1" }
-            with: (#struct){
-              tags: (string){ "${{ env.CUE_VERSION }},latest" }
-              repository: (string){ "cuelang/cue" }
-              username: (string){ "${{ secrets.DOCKER_USERNAME }}" }
-              password: (string){ "${{ secrets.DOCKER_PASSWORD }}" }
-              tag_with_ref: (bool){ false }
-              tag_with_sha: (bool){ false }
-              target: (string){ "cue" }
-              always_pull: (bool){ true }
-              build_args: (string){ "GOLANG_VERSION=${{ env.GOLANG_VERSION }},CUE_VERSION=v${{ env.CUE_VERSION }}" }
-              add_git_labels: (bool){ true }
             }
           }
         }
@@ -2552,14 +2234,10 @@ import "strings"
     "fail-fast": (bool){ false }
     matrix: (#struct){
       "go-version": (#list){
-        0: (string){ "1.14.14" }
-        1: (string){ "1.15.8" }
-        2: (string){ "1.16" }
+        0: (string){ "1.16" }
       }
       os: (#list){
         0: (string){ "ubuntu-18.04" }
-        1: (string){ "macos-10.15" }
-        2: (string){ "windows-2019" }
       }
     }
   }
@@ -2568,7 +2246,7 @@ import "strings"
     name: (string){ "Set go build tags" }
     run: (_|_){
       // [incomplete] _#setGoBuildTags.run: invalid interpolation: non-concrete value string (type string):
-      //     ./workflows.cue:305:10
+      //     ./workflows.cue:298:10
     }
   }
   _#installGo(:ci): (#struct){
@@ -2613,9 +2291,9 @@ import "strings"
     name: (string){ "Check that git is clean post generate and tests" }
     run: (string){ "test -z \"$(git status --porcelain)\" || (git status; git diff; false)" }
   }
-  _#writeCookiesFile(:ci): (#struct){
-    name: (string){ "Write the gitcookies file" }
-    run: (string){ "echo \"${{ secrets.gerritCookie }}\" > ~/.gitcookies" }
+  _#writeNetrcFile(:ci): (#struct){
+    name: (string){ "Write netrc file for cueckoo Gerrithub" }
+    run: (string){ "cat <<EOD > ~/.netrc\nmachine review.gerrithub.io\nlogin cueckoo\npassword ${{ secrets.CUECKOO_GERRITHUB_PASSWORD }}\nEOD\nchmod 600 ~/.netrc" }
   }
   _#branchRefPrefix(:ci): (string){ "refs/heads/" }
   _#tempCueckooGitDir(:ci): (string){ "mkdir tmpgit\ncd tmpgit\ngit init\ngit config user.name cueckoo\ngit config user.email cueckoo@gmail.com\ngit config http.https://github.com/.extraheader \"AUTHORIZATION: basic $(echo -n cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} | base64)\"" }
@@ -2667,18 +2345,6 @@ import "strings"
       file: "release.yml"
       schema: 〈1;release〉
     },
-    {
-      file: "tip_triggers.yml"
-      schema: 〈1;tip_triggers〉
-    },
-    {
-      file: "new_version_triggers.yml"
-      schema: 〈1;new_version_triggers〉
-    },
-    {
-      file: "mirror.yml"
-      schema: 〈1;mirror〉
-    },
   ])
   test: (〈0;_#bashWorkflow〉 & {
     name: "Test"
@@ -2700,7 +2366,7 @@ import "strings"
             if: "${{ \(〈3;_#isCLCITestBranch〉) }}"
           }),
         ] & [
-          〈3;_#writeCookiesFile〉,
+          〈3;_#writeNetrcFile〉,
           〈2;_#startCLBuild〉,
         ])
       }
@@ -2709,7 +2375,7 @@ import "strings"
         strategy: 〈3;_#testStrategy〉
         "runs-on": "${{ matrix.os }}"
         steps: [
-          〈3;_#writeCookiesFile〉,
+          〈3;_#writeNetrcFile〉,
           〈3;_#installGo〉,
           〈3;_#checkoutCode〉,
           〈3;_#cacheGoModules〉,
@@ -2719,12 +2385,8 @@ import "strings"
           }),
           〈3;_#goGenerate〉,
           〈3;_#goTest〉,
-          (〈3;_#goTestRace〉 & {
-            if: "${{ \(〈3;_#isMaster〉) || \(〈3;_#isCLCITestBranch〉) && matrix.go-version == '\(〈4;_#latestStableGo〉)' && matrix.os == '\(〈4;_#linuxMachine〉)' }}"
-          }),
           〈3;_#goReleaseCheck〉,
           〈3;_#checkGitClean〉,
-          〈2;_#pullThroughProxy〉,
           〈2;_#failCLBuild〉,
         ]
       }
@@ -2733,7 +2395,7 @@ import "strings"
         if: "${{ \(〈2;_#isCLCITestBranch〉) }}"
         needs: "test"
         steps: [
-          〈3;_#writeCookiesFile〉,
+          〈3;_#writeNetrcFile〉,
           〈2;_#passCLBuild〉,
         ]
       }
@@ -2744,7 +2406,7 @@ import "strings"
         steps: [
           (〈3;_#step〉 & {
             run: "\(〈4;_#tempCueckooGitDir〉)
-            git push https://github.com/cuelang/cue :${GITHUB_REF#\(〈4;_#branchRefPrefix〉)}"
+            git push https://github.com/myitcvscratch/cue :${GITHUB_REF#\(〈4;_#branchRefPrefix〉)}"
           }),
         ]
       }
@@ -2771,7 +2433,7 @@ import "strings"
         #args: {
           message: "Build failed for ${{ runner.os }}-${{ matrix.go-version }}; see ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }} for more details"
           labels: {
-            "Code-Review": -1
+            "TryBot-Result": -1
           }
         }
       }).res
@@ -2782,7 +2444,7 @@ import "strings"
         #args: {
           message: "Build succeeded for ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}"
           labels: {
-            "Code-Review": 1
+            "TryBot-Result": 1
           }
         }
       }).res
@@ -2793,10 +2455,10 @@ import "strings"
           tag: "trybot"
           message: string
           labels?: {
-            "Code-Review": int
+            "TryBot-Result": int
           }
         }
-        res: "\(〈3;_#curl〉) -H "Content-Type: application/json" --request POST --data '\(〈import;"encoding/json"〉.Marshal(〈0;#args〉))' -b ~/.gitcookies https://cue-review.googlesource.com/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review"
+        res: "\(〈3;_#curl〉) -n -H "Content-Type: application/json" --request POST --data '\(〈import;"encoding/json"〉.Marshal(〈0;#args〉))' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review"
       }
     }
   })
@@ -2818,12 +2480,13 @@ import "strings"
       "\(〈1;_#runtrybot〉)": (〈1;_#dispatchJob〉 & {
         _#type: 〈2;_#runtrybot〉
         steps: [
+          〈3;_#writeNetrcFile〉,
           (〈3;_#step〉 & {
             name: "Trigger trybot"
             run: "\(〈4;_#tempCueckooGitDir〉)
-            git fetch https://cue-review.googlesource.com/cue ${{ github.event.client_payload.payload.ref }}
+            git fetch https://review.gerrithub.io/a/myitcvscratch/cue ${{ github.event.client_payload.payload.ref }}
             git checkout -b ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }} FETCH_HEAD
-            git push https://github.com/cuelang/cue ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }}"
+            git push https://github.com/myitcvscratch/cue ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }}"
           }),
         ]
       })
@@ -2891,44 +2554,12 @@ import "strings"
           (〈3;_#step〉 & {
             name: "Run GoReleaser"
             env: {
-              GITHUB_TOKEN: "${{ secrets.ACTIONS_GITHUB_TOKEN }}"
+              GITHUB_TOKEN: "${{ secrets.CUECKOO_GITHUB_PAT }}"
             }
             uses: "goreleaser/goreleaser-action@v2"
             with: {
               args: "release --rm-dist"
               version: "v0.155.1"
-            }
-          }),
-        ]
-      }
-      docker: {
-        name: "docker"
-        "runs-on": 〈3;_#linuxMachine〉
-        steps: [
-          〈3;_#checkoutCode〉,
-          (〈3;_#step〉 & {
-            name: "Set version environment"
-            run: "CUE_VERSION=$(echo ${GITHUB_REF##refs/tags/v})\necho \"CUE_VERSION=$CUE_VERSION\"\necho \"CUE_VERSION=$(echo $CUE_VERSION)\" >> $GITHUB_ENV"
-          }),
-          (〈3;_#step〉 & {
-            name: "Push to Docker Hub"
-            env: {
-              DOCKER_BUILDKIT: 1
-              GOLANG_VERSION: 1.14
-              CUE_VERSION: "${{ env.CUE_VERSION }}"
-            }
-            uses: "docker/build-push-action@v1"
-            with: {
-              tags: "${{ env.CUE_VERSION }},latest"
-              repository: "cuelang/cue"
-              username: "${{ secrets.DOCKER_USERNAME }}"
-              password: "${{ secrets.DOCKER_PASSWORD }}"
-              tag_with_ref: false
-              tag_with_sha: false
-              target: "cue"
-              always_pull: true
-              build_args: "GOLANG_VERSION=${{ env.GOLANG_VERSION }},CUE_VERSION=v${{ env.CUE_VERSION }}"
-              add_git_labels: true
             }
           }),
         ]
@@ -3013,14 +2644,10 @@ import "strings"
     "fail-fast": false
     matrix: {
       "go-version": [
-        〈2;_#codeGenGo〉,
-        〈2;_#latestStableGo〉,
         "1.16",
       ]
       os: [
         〈2;_#linuxMachine〉,
-        〈2;_#macosMachine〉,
-        〈2;_#windowsMachine〉,
       ]
     }
   }
@@ -3071,9 +2698,9 @@ import "strings"
     name: "Check that git is clean post generate and tests"
     run: "test -z \"$(git status --porcelain)\" || (git status; git diff; false)"
   })
-  _#writeCookiesFile: (〈0;_#step〉 & {
-    name: "Write the gitcookies file"
-    run: "echo \"${{ secrets.gerritCookie }}\" > ~/.gitcookies"
+  _#writeNetrcFile: (〈0;_#step〉 & {
+    name: "Write netrc file for cueckoo Gerrithub"
+    run: "cat <<EOD > ~/.netrc\nmachine review.gerrithub.io\nlogin cueckoo\npassword ${{ secrets.CUECKOO_GERRITHUB_PASSWORD }}\nEOD\nchmod 600 ~/.netrc"
   })
   _#branchRefPrefix: "refs/heads/"
   _#tempCueckooGitDir: "mkdir tmpgit\ncd tmpgit\ngit init\ngit config user.name cueckoo\ngit config user.email cueckoo@gmail.com\ngit config http.https://github.com/.extraheader \"AUTHORIZATION: basic $(echo -n cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} | base64)\""
