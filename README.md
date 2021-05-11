@@ -14,8 +14,8 @@
  limitations under the License.
 -->
 [![Go Reference](https://pkg.go.dev/badge/cuelang.org/go.svg)](https://pkg.go.dev/cuelang.org/go)
-[![Github](https://github.com/cuelang/cue/workflows/Test/badge.svg)](https://github.com/cuelang/cue/actions)
-[![GolangCI](https://golangci.com/badges/github.com/cuelang/cue.svg)](https://golangci.com/r/github.com/cuelang/cue)
+[![Github](https://github.com/myitcvscratch/cue/workflows/Test/badge.svg)](https://github.com/myitcvscratch/cue/actions)
+[![GolangCI](https://golangci.com/badges/github.com/myitcvscratch/cue.svg)](https://golangci.com/r/github.com/myitcvscratch/cue)
 [![Go 1.14+](https://img.shields.io/badge/go-1.14-9cf.svg)](https://golang.org/dl/)
 [![platforms](https://img.shields.io/badge/platforms-linux|windows|macos-inactive.svg)]()
 
@@ -95,7 +95,7 @@ Some aspects of this are:
 
 #### Release builds
 
-[Download](https://github.com/cuelang/cue/releases) the latest release from GitHub.
+[Download](https://github.com/myitcvscratch/cue/releases) the latest release from GitHub.
 
 #### Install using Homebrew
 
@@ -151,7 +151,7 @@ Our canonical Git repository is located at https://cue.googlesource.com.
 To contribute, please read the [Contribution Guide](./doc/contribute.md).
 
 To report issues or make a feature request, use the
-[issue tracker](https://github.com/cuelang/cue/issues).
+[issue tracker](https://github.com/myitcvscratch/cue/issues).
 
 Changes can be contributed using Gerrit or Github pull requests.
 
@@ -160,7 +160,7 @@ Changes can be contributed using Gerrit or Github pull requests.
 
 You can get in touch with the cuelang community in the following ways:
 
-- Ask questions via [GitHub Discussions](https://github.com/cuelang/cue/discussions)
+- Ask questions via [GitHub Discussions](https://github.com/myitcvscratch/cue/discussions)
 - Chat with us on our
   [Slack workspace](https://join.slack.com/t/cuelang/shared_invite/enQtNzQwODc3NzYzNTA0LTAxNWQwZGU2YWFiOWFiOWQ4MjVjNGQ2ZTNlMmIxODc4MDVjMDg5YmIyOTMyMjQ2MTkzMTU5ZjA1OGE0OGE1NmE).
 

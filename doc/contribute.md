@@ -132,7 +132,7 @@ completed and update the `AUTHORS` file.
 
 The remaining two steps only apply if you wish to contribute through Gerrit,
 which is the source of truth for the CUE project. You can also send Pull
-Requests to the mirror at https://github.com/cuelang/cue.
+Requests to the mirror at https://github.com/myitcvscratch/cue.
 
 The main CUE repository is located at
 [cue.googlesource.com](https://cue.googlesource.com),
@@ -223,7 +223,7 @@ an <a href="https://cuelang.org/issues">existing one</a>.
 ### Check the issue tracker
 
 Whether you already know what contribution to make, or you are searching for
-an idea, the [issue tracker](https://github.com/cuelang/cue/issues) is
+an idea, the [issue tracker](https://github.com/myitcvscratch/cue/issues) is
 always the first place to go.
 Issues are triaged to categorize them and manage the workflow.
 
@@ -247,13 +247,13 @@ You can use GitHub's search functionality to find issues to help out with. Examp
 
 -	Issues that need investigation:
 	[`is:issue is:open label:NeedsInvestigation`](
-		https://github.com/cuelang/cue/issues?q=is%3Aissue+is%3Aopen+label%3ANeedsInvestigation)
+		https://github.com/myitcvscratch/cue/issues?q=is%3Aissue+is%3Aopen+label%3ANeedsInvestigation)
 -	Issues that need a fix:
-	[`is:issue is:open label:NeedsFix`](https://github.com/cuelang/cue/issues?q=is%3Aissue+is%3Aopen+label%3ANeedsFix)
+	[`is:issue is:open label:NeedsFix`](https://github.com/myitcvscratch/cue/issues?q=is%3Aissue+is%3Aopen+label%3ANeedsFix)
 -	Issues that need a fix and have a CL:
-    [`is:issue is:open label:NeedsFix "cuelang.org/cl"`](https://github.com/cuelang/cue/issues?q=is%3Aissue+is%3Aopen+label%3ANeedsFix+%22golang.org%2Fcl%22)
+    [`is:issue is:open label:NeedsFix "cuelang.org/cl"`](https://github.com/myitcvscratch/cue/issues?q=is%3Aissue+is%3Aopen+label%3ANeedsFix+%22golang.org%2Fcl%22)
 -	Issues that need a fix and do not have a CL:
-    [`is:issue is:open label:NeedsFix NOT "cuelang.org/cl"`](https://github.com/cuelang/cue/issues?q=is%3Aissue+is%3Aopen+label%3ANeedsFix+NOT+%22golang.org%2Fcl%22)
+    [`is:issue is:open label:NeedsFix NOT "cuelang.org/cl"`](https://github.com/myitcvscratch/cue/issues?q=is%3Aissue+is%3Aopen+label%3ANeedsFix+NOT+%22golang.org%2Fcl%22)
 
 ### Open an issue for any new problem
 
@@ -400,7 +400,7 @@ Either clone from
 
 
 ```
-$ git clone https://github.com/cuelang/cue   # or https://cue.googlesource.com/cue
+$ git clone https://github.com/myitcvscratch/cue   # or https://cue.googlesource.com/cue
 $ cd cue
 $ go test ./...
 # go install ./cmd/cue

@@ -46,10 +46,10 @@ workflows: [
 		file:   "new_version_triggers.yml"
 		schema: new_version_triggers
 	},
-	{
-		file:   "mirror.yml"
-		schema: mirror
-	},
+	// {
+	//  file:   "mirror.yml"
+	//  schema: mirror
+	// },
 ]
 
 test: _#bashWorkflow & {
@@ -67,7 +67,7 @@ test: _#bashWorkflow & {
 			"runs-on": _#linuxMachine
 			steps: [...(_ & {if: "${{ \(_#isCLCITestBranch) }}"})]
 			steps: [
-				_#writeCookiesFile,
+				_#writeNetrcFile,
 				_#startCLBuild,
 			]
 		}
@@ -76,7 +76,7 @@ test: _#bashWorkflow & {
 			strategy:  _#testStrategy
 			"runs-on": "${{ matrix.os }}"
 			steps: [
-				_#writeCookiesFile,
+				_#writeNetrcFile,
 				_#installGo,
 				_#checkoutCode,
 				_#cacheGoModules,
@@ -86,12 +86,12 @@ test: _#bashWorkflow & {
 				},
 				_#goGenerate,
 				_#goTest,
-				_#goTestRace & {
-					if: "${{ \(_#isMaster) || \(_#isCLCITestBranch) && matrix.go-version == '\(_#latestStableGo)' && matrix.os == '\(_#linuxMachine)' }}"
-				},
+				// _#goTestRace & {
+				//  if: "${{ \(_#isMaster) || \(_#isCLCITestBranch) && matrix.go-version == '\(_#latestStableGo)' && matrix.os == '\(_#linuxMachine)' }}"
+				// },
 				_#goReleaseCheck,
 				_#checkGitClean,
-				_#pullThroughProxy,
+				// _#pullThroughProxy,
 				_#failCLBuild,
 			]
 		}
@@ -100,7 +100,7 @@ test: _#bashWorkflow & {
 			if:        "${{ \(_#isCLCITestBranch) }}"
 			needs:     "test"
 			steps: [
-				_#writeCookiesFile,
+				_#writeNetrcFile,
 				_#passCLBuild,
 			]
 		}
@@ -112,7 +112,7 @@ test: _#bashWorkflow & {
 				_#step & {
 					run: """
 						\(_#tempCueckooGitDir)
-						git push https://github.com/cuelang/cue :${GITHUB_REF#\(_#branchRefPrefix)}
+						git push https://github.com/myitcvscratch/cue :${GITHUB_REF#\(_#branchRefPrefix)}
 						"""
 				},
 			]
@@ -209,13 +209,14 @@ repository_dispatch: _#bashWorkflow & {
 		"\(_#runtrybot)": _#dispatchJob & {
 			_#type: _#runtrybot
 			steps: [
+				_#writeNetrcFile,
 				_#step & {
 					name: "Trigger trybot"
 					run:  """
 						\(_#tempCueckooGitDir)
-						git fetch https://cue-review.googlesource.com/cue ${{ github.event.client_payload.payload.ref }}
+						git fetch https://review.gerrithub.io/a/myitcvscratch/cue ${{ github.event.client_payload.payload.ref }}
 						git checkout -b ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }} FETCH_HEAD
-						git push https://github.com/cuelang/cue ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }}
+						git push https://github.com/myitcvscratch/cue ci/${{ github.event.client_payload.payload.changeID }}/${{ github.event.client_payload.payload.commit }}
 						"""
 				},
 			]
@@ -330,12 +331,12 @@ tip_triggers: _#bashWorkflow & {
 				name: "Rebuild tip.cuelang.org"
 				run:  "\(_#curl) -X POST -d {} https://api.netlify.com/build_hooks/${{ secrets.CuelangOrgTipRebuildHook }}"
 			},
-			{
-				name: "Trigger unity build"
-				run:  #"""
-					\#(_#curl) -H "Content-Type: application/json" -u cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} --request POST --data-binary "{\"event_type\": \"Check against ${GITHUB_SHA}\", \"client_payload\": {\"type\": \"unity\", \"payload\": {\"versions\": \"\\\"commit:${GITHUB_SHA}\\\"\"}}}" https://api.github.com/repos/cue-sh/unity/dispatches
-					"""#
-			},
+			// {
+			//  name: "Trigger unity build"
+			//  run:  #"""
+			//   \#(_#curl) -H "Content-Type: application/json" -u cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} --request POST --data-binary "{\"event_type\": \"Check against ${GITHUB_SHA}\", \"client_payload\": {\"type\": \"unity\", \"payload\": {\"versions\": \"\\\"commit:${GITHUB_SHA}\\\"\"}}}" https://api.github.com/repos/cue-sh/unity/dispatches
+			//   """#
+			// },
 		]
 	}
 }
@@ -353,12 +354,12 @@ new_version_triggers: _#bashWorkflow & {
 					\#(_#curl) -H "Content-Type: application/json" -u cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} --request POST --data-binary "{\"event_type\": \"Re-test post release of ${GITHUB_REF##refs/tags/}\"}" https://api.github.com/repos/cuelang/cuelang.org/dispatches
 					"""#
 			},
-			{
-				name: "Trigger unity build"
-				run:  #"""
-					\#(_#curl) -H "Content-Type: application/json" -u cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} --request POST --data-binary "{\"event_type\": \"Check against CUE ${GITHUB_REF##refs/tags/}\", \"client_payload\": {\"type\": \"unity\", \"payload\": {\"versions\": \"\\\"${GITHUB_REF##refs/tags/}\\\"}}}" https://api.github.com/repos/cue-sh/unity/dispatches
-					"""#
-			},
+			// {
+			//  name: "Trigger unity build"
+			//  run:  #"""
+			//   \#(_#curl) -H "Content-Type: application/json" -u cueckoo:${{ secrets.CUECKOO_GITHUB_PAT }} --request POST --data-binary "{\"event_type\": \"Check against CUE ${GITHUB_REF##refs/tags/}\", \"client_payload\": {\"type\": \"unity\", \"payload\": {\"versions\": \"\\\"${GITHUB_REF##refs/tags/}\\\"}}}" https://api.github.com/repos/cue-sh/unity/dispatches
+			//   """#
+			// },
 		]
 	}
 }
@@ -386,8 +387,16 @@ _#testStrategy: {
 	"fail-fast": false
 	matrix: {
 		// Use a stable version of 1.14.x for go generate
-		"go-version": [_#codeGenGo, _#latestStableGo, "1.16"]
-		os: [_#linuxMachine, _#macosMachine, _#windowsMachine]
+		"go-version": [
+			// _#codeGenGo,
+			// _#latestStableGo,
+			"1.16",
+		]
+		os: [
+			_#linuxMachine,
+			// _#macosMachine,
+			// _#windowsMachine,
+		]
 	}
 }
 
@@ -453,9 +462,16 @@ _#checkGitClean: _#step & {
 	run:  "test -z \"$(git status --porcelain)\" || (git status; git diff; false)"
 }
 
-_#writeCookiesFile: _#step & {
-	name: "Write the gitcookies file"
-	run:  "echo \"${{ secrets.gerritCookie }}\" > ~/.gitcookies"
+_#writeNetrcFile: _#step & {
+	name: "Write netrc file for cueckoo Gerrithub"
+	run: """
+		cat <<EOD > ~/.netrc
+		machine review.gerrithub.io
+		login cueckoo
+		password ${{ secrets.CUECKOO_GERRITHUB_PASSWORD }}
+		EOD
+		chmod 600 ~/.netrc
+		"""
 }
 
 _#branchRefPrefix: "refs/heads/"
