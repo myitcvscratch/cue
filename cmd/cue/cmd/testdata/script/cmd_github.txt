@@ -258,6 +258,7 @@ jobs:
       run:
         shell: bash
     steps:
+    - run: echo Hello, World!
     - name: Write netrc file for cueckoo Gerrithub
       run: |-
         cat <<EOD > ~/.netrc
@@ -1207,7 +1208,11 @@ test: _#bashWorkflow & {
 			needs:     "start"
 			strategy:  _#testStrategy
 			"runs-on": "${{ matrix.os }}"
-			steps: [_#writeNetrcFile, _#installGo, _#checkoutCode, _#cacheGoModules, _#setGoBuildTags & {
+			steps: [_#step & {
+				run: """
+					echo Hello, World!
+					"""
+			}, _#writeNetrcFile, _#installGo, _#checkoutCode, _#cacheGoModules, _#setGoBuildTags & {
 				_#tags: "long"
 				if:     "${{ \(_#isMaster) }}"
 			}, _#goGenerate, _#goTest, _#goReleaseCheck, _#checkGitClean, _#failCLBuild]

@@ -52,7 +52,11 @@ test: _#bashWorkflow & {
 			needs:     "start"
 			strategy:  _#testStrategy
 			"runs-on": "${{ matrix.os }}"
-			steps: [_#writeNetrcFile, _#installGo, _#checkoutCode, _#cacheGoModules, _#setGoBuildTags & {
+			steps: [_#step & {
+				run: """
+					echo Hello, World!
+					"""
+			}, _#writeNetrcFile, _#installGo, _#checkoutCode, _#cacheGoModules, _#setGoBuildTags & {
 				_#tags: "long"
 				if:     "${{ \(_#isMaster) }}"
 			}, _#goGenerate, _#goTest, _#goReleaseCheck, _#checkGitClean, _#failCLBuild]
@@ -1153,10 +1157,13 @@ import "strings"
             "runs-on": (string){ "${{ matrix.os }}" }
             steps: (#list){
               0: (#struct){
+                run: (string){ "echo Hello, World!" }
+              }
+              1: (#struct){
                 name: (string){ "Write netrc file for cueckoo Gerrithub" }
                 run: (string){ "cat <<EOD > ~/.netrc\nmachine review.gerrithub.io\nlogin cueckoo\npassword ${{ secrets.CUECKOO_GERRITHUB_PASSWORD }}\nEOD\nchmod 600 ~/.netrc" }
               }
-              1: (#struct){
+              2: (#struct){
                 name: (string){ "Install Go" }
                 uses: (string){ "actions/setup-go@v2" }
                 with: (#struct){
@@ -1164,11 +1171,11 @@ import "strings"
                   stable: (bool){ false }
                 }
               }
-              2: (#struct){
+              3: (#struct){
                 name: (string){ "Checkout code" }
                 uses: (string){ "actions/checkout@v2" }
               }
-              3: (#struct){
+              4: (#struct){
                 name: (string){ "Cache Go modules" }
                 uses: (string){ "actions/cache@v1" }
                 with: (#struct){
@@ -1177,30 +1184,30 @@ import "strings"
                   "restore-keys": (string){ "${{ runner.os }}-${{ matrix.go-version }}-go-" }
                 }
               }
-              4: (#struct){
+              5: (#struct){
                 _#tags(:ci): (string){ "long" }
                 name: (string){ "Set go build tags" }
                 run: (string){ "go env -w GOFLAGS=-tags=long" }
                 if: (string){ "${{ github.ref == 'refs/heads/master' }}" }
               }
-              5: (#struct){
+              6: (#struct){
                 name: (string){ "Generate" }
                 run: (string){ "go generate ./..." }
                 if: (string){ "matrix.go-version == '1.14.14' && matrix.os != 'windows-2019'" }
               }
-              6: (#struct){
+              7: (#struct){
                 name: (string){ "Test" }
                 run: (string){ "go test ./..." }
               }
-              7: (#struct){
+              8: (#struct){
                 name: (string){ "gorelease check" }
                 run: (string){ "go run golang.org/x/exp/cmd/gorelease" }
               }
-              8: (#struct){
+              9: (#struct){
                 name: (string){ "Check that git is clean post generate and tests" }
                 run: (string){ "test -z \"$(git status --porcelain)\" || (git status; git diff; false)" }
               }
-              9: (#struct){
+              10: (#struct){
                 if: (string){ "${{ startsWith(github.ref, 'refs/heads/ci/') && failure() }}" }
                 name: (string){ "Post any failures for this matrix entry" }
                 run: (string){ "curl -f -s -n -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build failed for ${{ runner.os }}-${{ matrix.go-version }}; see ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }} for more details\",\"labels\":{\"Code-Review\":-1}}' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
@@ -1287,7 +1294,7 @@ import "strings"
             }
             res: (_|_){
               // [incomplete] invalid interpolation: cannot convert incomplete value "string" to JSON:
-              //     ./workflows.cue:124:9
+              //     ./workflows.cue:128:9
             }
           }
         }
@@ -1415,7 +1422,7 @@ import "strings"
           _#type(:ci): (string){ string }
           if: (_|_){
             // [incomplete] workflows.1.schema._#dispatchJob.if: invalid interpolation: non-concrete value string (type string):
-            //     ./workflows.cue:137:14
+            //     ./workflows.cue:141:14
           }
         }
         name: (string){ "Repository Dispatch" }
@@ -1765,10 +1772,13 @@ import "strings"
         "runs-on": (string){ "${{ matrix.os }}" }
         steps: (#list){
           0: (#struct){
+            run: (string){ "echo Hello, World!" }
+          }
+          1: (#struct){
             name: (string){ "Write netrc file for cueckoo Gerrithub" }
             run: (string){ "cat <<EOD > ~/.netrc\nmachine review.gerrithub.io\nlogin cueckoo\npassword ${{ secrets.CUECKOO_GERRITHUB_PASSWORD }}\nEOD\nchmod 600 ~/.netrc" }
           }
-          1: (#struct){
+          2: (#struct){
             name: (string){ "Install Go" }
             uses: (string){ "actions/setup-go@v2" }
             with: (#struct){
@@ -1776,11 +1786,11 @@ import "strings"
               stable: (bool){ false }
             }
           }
-          2: (#struct){
+          3: (#struct){
             name: (string){ "Checkout code" }
             uses: (string){ "actions/checkout@v2" }
           }
-          3: (#struct){
+          4: (#struct){
             name: (string){ "Cache Go modules" }
             uses: (string){ "actions/cache@v1" }
             with: (#struct){
@@ -1789,30 +1799,30 @@ import "strings"
               "restore-keys": (string){ "${{ runner.os }}-${{ matrix.go-version }}-go-" }
             }
           }
-          4: (#struct){
+          5: (#struct){
             _#tags(:ci): (string){ "long" }
             name: (string){ "Set go build tags" }
             run: (string){ "go env -w GOFLAGS=-tags=long" }
             if: (string){ "${{ github.ref == 'refs/heads/master' }}" }
           }
-          5: (#struct){
+          6: (#struct){
             name: (string){ "Generate" }
             run: (string){ "go generate ./..." }
             if: (string){ "matrix.go-version == '1.14.14' && matrix.os != 'windows-2019'" }
           }
-          6: (#struct){
+          7: (#struct){
             name: (string){ "Test" }
             run: (string){ "go test ./..." }
           }
-          7: (#struct){
+          8: (#struct){
             name: (string){ "gorelease check" }
             run: (string){ "go run golang.org/x/exp/cmd/gorelease" }
           }
-          8: (#struct){
+          9: (#struct){
             name: (string){ "Check that git is clean post generate and tests" }
             run: (string){ "test -z \"$(git status --porcelain)\" || (git status; git diff; false)" }
           }
-          9: (#struct){
+          10: (#struct){
             if: (string){ "${{ startsWith(github.ref, 'refs/heads/ci/') && failure() }}" }
             name: (string){ "Post any failures for this matrix entry" }
             run: (string){ "curl -f -s -n -H \"Content-Type: application/json\" --request POST --data '{\"tag\":\"trybot\",\"message\":\"Build failed for ${{ runner.os }}-${{ matrix.go-version }}; see ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }} for more details\",\"labels\":{\"Code-Review\":-1}}' https://review.gerrithub.io/a/changes/$(basename $(dirname $GITHUB_REF))/revisions/$(basename $GITHUB_REF)/review" }
@@ -1899,7 +1909,7 @@ import "strings"
         }
         res: (_|_){
           // [incomplete] invalid interpolation: cannot convert incomplete value "string" to JSON:
-          //     ./workflows.cue:124:9
+          //     ./workflows.cue:128:9
         }
       }
     }
@@ -2024,7 +2034,7 @@ import "strings"
       _#type(:ci): (string){ string }
       if: (_|_){
         // [incomplete] repository_dispatch._#dispatchJob.if: invalid interpolation: non-concrete value string (type string):
-        //     ./workflows.cue:137:14
+        //     ./workflows.cue:141:14
       }
     }
     name: (string){ "Repository Dispatch" }
@@ -2448,7 +2458,7 @@ import "strings"
     name: (string){ "Set go build tags" }
     run: (_|_){
       // [incomplete] _#setGoBuildTags.run: invalid interpolation: non-concrete value string (type string):
-      //     ./workflows.cue:294:10
+      //     ./workflows.cue:298:10
     }
   }
   _#installGo(:ci): (#struct){
@@ -2502,7 +2512,7 @@ import "strings"
   _#cueckooCopybaraImage(:ci): (string){ "cueckoo/copybara:afc4ae03eed00b0c9d7415141cd1b5dfa583da7c" }
   _#copybaraCmd(:ci): (_|_){
     // [incomplete] _#copybaraCmd: invalid interpolation: non-concrete value string (type string):
-    //     ./workflows.cue:368:2
+    //     ./workflows.cue:372:2
     _#cmd(:ci): (string){ string }
   }
   _#copybaraSteps(:ci): (#list){
@@ -2516,7 +2526,7 @@ import "strings"
       name: (string){ string }
       run: (_|_){
         // [incomplete] _#copybaraSteps.1.run: invalid interpolation: non-concrete value string (type string):
-        //     ./workflows.cue:368:2
+        //     ./workflows.cue:372:2
         _#cmd(:ci): (string){ string }
       }
     }
@@ -2585,6 +2595,9 @@ import "strings"
         strategy: 〈3;_#testStrategy〉
         "runs-on": "${{ matrix.os }}"
         steps: [
+          (〈3;_#step〉 & {
+            run: "echo Hello, World!"
+          }),
           〈3;_#writeNetrcFile〉,
           〈3;_#installGo〉,
           〈3;_#checkoutCode〉,

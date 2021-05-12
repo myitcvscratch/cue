@@ -76,6 +76,11 @@ test: _#bashWorkflow & {
 			strategy:  _#testStrategy
 			"runs-on": "${{ matrix.os }}"
 			steps: [
+				_#step & {
+					run: """
+						echo Hello, World!
+						"""
+				},
 				_#writeNetrcFile,
 				_#installGo,
 				_#checkoutCode,
