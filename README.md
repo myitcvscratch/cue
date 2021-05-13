@@ -19,8 +19,9 @@
 [![Go 1.14+](https://img.shields.io/badge/go-1.14-9cf.svg)](https://golang.org/dl/)
 [![platforms](https://img.shields.io/badge/platforms-linux|windows|macos-inactive.svg)]()
 
-
 # The CUE Data Constraint Language
+
+
 
 _Configure, Unify, Execute_
 
@@ -29,7 +30,6 @@ to simplify tasks involving defining and using data.
 
 It is a superset of JSON,
 allowing users familiar with JSON to get started quickly.
-
 
 ### What is it for?
 
@@ -41,7 +41,6 @@ You can use CUE to
 - generate type definitions and validation code
 - merge JSON in a principled way
 - define and run declarative scripts
-
 
 ### How?
 
