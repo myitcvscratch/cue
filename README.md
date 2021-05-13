@@ -19,8 +19,9 @@
 [![Go 1.14+](https://img.shields.io/badge/go-1.14-9cf.svg)](https://golang.org/dl/)
 [![platforms](https://img.shields.io/badge/platforms-linux|windows|macos-inactive.svg)]()
 
-
 # The CUE Data Constraint Language
+
+
 
 _Configure, Unify, Execute_
 
