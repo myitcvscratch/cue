@@ -30,7 +30,6 @@ to simplify tasks involving defining and using data.
 It is a superset of JSON,
 allowing users familiar with JSON to get started quickly.
 
-
 ### What is it for?
 
 You can use CUE to
@@ -171,4 +170,5 @@ Unless otherwise noted, the CUE source files are distributed
 under the Apache 2.0 license found in the LICENSE file.
 
 This is not an officially supported Google product.
+
 
